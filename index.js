@@ -178,6 +178,8 @@ async function _routeMessage(jid, text, quotedStanzaId, sendFn) {
           return;
         }
         setWorkingDir(jid, resolved);
+        claude.clearSession(jid);
+        saveState();
         await sendFn(`Working directory changed to: ${resolved}`);
         return;
       }
