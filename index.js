@@ -4,6 +4,7 @@ import path from "node:path";
 import { WhatsAppClient } from "./whatsapp.js";
 import { ClaudeHandler } from "./claude-handler.js";
 import { FileBrowser } from "./file-browser.js";
+import { getGitFileInfo, parseGitHubUrl, buildGitHubFileUrl } from "./git-utils.js";
 
 // --- Config ---
 
@@ -89,6 +90,41 @@ function makeSendFn(jid) {
   };
 }
 
+async function sendFileView(jid, result, workingDir) {
+  const sendFn = makeSendFn(jid);
+
+  if (!result.content) {
+    return sendFn(result.text);
+  }
+
+  const gitInfo = result.fullPath
+    ? await getGitFileInfo(result.fullPath, workingDir)
+    : null;
+
+  const githubBase = gitInfo ? parseGitHubUrl(gitInfo.remoteUrl) : null;
+  const githubUrl =
+    githubBase && gitInfo.branch && result.fullPath
+      ? buildGitHubFileUrl(githubBase, gitInfo.branch, gitInfo.repoRoot, result.fullPath)
+      : null;
+
+  // File has uncommitted changes → send the diff
+  if (gitInfo?.diff) {
+    const header = githubUrl
+      ? `📄 ${path.basename(result.fullPath)} (modified)\n${githubUrl}`
+      : `📄 ${path.basename(result.fullPath)} (modified)`;
+    return sendFn(`${header}\n\`\`\`diff\n${gitInfo.diff}\n\`\`\``);
+  }
+
+  // Clean file with GitHub remote → send link
+  if (githubUrl) {
+    const header = `📄 ${path.basename(result.fullPath)} (${result.fullLineCount} lines, ${result.language})`;
+    return sendFn(`${header}\n${githubUrl}`);
+  }
+
+  // Fallback → raw text
+  return sendFn(result.text);
+}
+
 // --- Message Router ---
 
 async function handleMessage(jid, text, quotedStanzaId, _rawMsg, fromMe) {
@@ -127,7 +163,11 @@ async function _routeMessage(jid, text, quotedStanzaId, sendFn) {
     try {
       const result = await browser.handleNumberReply(jid, parseInt(text.trim(), 10));
       if (result) {
-        await sendFn(result.text);
+        if (result.type === "file") {
+          await sendFileView(jid, result, getWorkingDir(jid));
+        } else {
+          await sendFn(result.text);
+        }
       }
     } catch (err) {
       await sendFn(`Error: ${err.message}`);
@@ -218,7 +258,7 @@ async function _routeMessage(jid, text, quotedStanzaId, sendFn) {
           return;
         }
         const result = await browser.viewFile(filePath, getWorkingDir(jid));
-        await sendFn(result.text);
+        await sendFileView(jid, result, getWorkingDir(jid));
         return;
       }
 
@@ -245,7 +285,7 @@ async function _routeMessage(jid, text, quotedStanzaId, sendFn) {
       return;
     }
     const result = await browser.viewFile(filePath, getWorkingDir(jid));
-    await sendFn(result.text);
+    await sendFileView(jid, result, getWorkingDir(jid));
     return;
   }
 

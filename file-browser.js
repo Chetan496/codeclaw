@@ -150,6 +150,7 @@ export class FileBrowser {
       content: displayContent,
       language,
       fullLineCount: lines.length,
+      fullPath,
     };
   }
 
