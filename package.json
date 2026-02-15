@@ -1,0 +1,20 @@
+{
+  "name": "codeclaw",
+  "version": "1.0.0",
+  "description": "A WhatsApp interface for Claude Code",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.42",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "dotenv": "^16.4.0",
+    "qrcode-terminal": "^0.12.0",
+    "zod": "^4.0.0"
+  }
+}
