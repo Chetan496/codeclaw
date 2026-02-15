@@ -3,6 +3,7 @@ package-lock.json
 node_modules
 
 auth
+.codeclaw-state.json
 
 # systemd service file
 codeclaw.service

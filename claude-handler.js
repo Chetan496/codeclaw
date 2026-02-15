@@ -239,6 +239,20 @@ export class ClaudeHandler {
     }
   }
 
+  /** Return all sessions as a plain object for persistence. */
+  getSessions() {
+    return Object.fromEntries(this.sessions);
+  }
+
+  /** Restore sessions from a plain object (e.g. loaded from state file). */
+  restoreSessions(obj) {
+    if (obj && typeof obj === "object") {
+      for (const [chatId, sessionId] of Object.entries(obj)) {
+        this.sessions.set(chatId, sessionId);
+      }
+    }
+  }
+
   clearSession(chatId) {
     this.sessions.delete(chatId);
   }

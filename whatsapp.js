@@ -93,7 +93,11 @@ export class WhatsAppClient {
       // For messages sent by the account owner (fromMe), the sender is
       // the account itself, identified by remoteJid of the "Message Yourself"
       // chat or participant. Pass fromMe so the router can auth correctly.
-      this.messageCallback(jid, text, quotedStanzaId, msg, msg.key.fromMe);
+      Promise.resolve(
+        this.messageCallback(jid, text, quotedStanzaId, msg, msg.key.fromMe)
+      ).catch((err) => {
+        console.error("[whatsapp] Message handler error:", err);
+      });
     }
   }
 

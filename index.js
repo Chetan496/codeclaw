@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { stat } from "node:fs/promises";
+import { stat, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { WhatsAppClient } from "./whatsapp.js";
 import { ClaudeHandler } from "./claude-handler.js";
@@ -8,7 +8,41 @@ import { FileBrowser } from "./file-browser.js";
 // --- Config ---
 
 const DEFAULT_WORKING_DIR = process.env.WORKING_DIR || process.cwd();
+const STATE_FILE = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  ".codeclaw-state.json"
+);
 const chatState = new Map(); // jid -> { workingDir: string }
+
+async function loadState() {
+  try {
+    const data = JSON.parse(await readFile(STATE_FILE, "utf-8"));
+    if (data.chatState) {
+      for (const [jid, state] of Object.entries(data.chatState)) {
+        chatState.set(jid, state);
+      }
+    }
+    if (data.sessions) {
+      claude.restoreSessions(data.sessions);
+      console.log(`[codeclaw] Restored ${Object.keys(data.sessions).length} Claude session(s)`);
+    }
+    console.log(`[codeclaw] Loaded state for ${chatState.size} chat(s)`);
+  } catch {
+    // No saved state or parse error — start fresh
+  }
+}
+
+async function saveState() {
+  const data = {
+    chatState: Object.fromEntries(chatState),
+    sessions: claude.getSessions(),
+  };
+  try {
+    await writeFile(STATE_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[codeclaw] Failed to save state:", err.message);
+  }
+}
 
 function getWorkingDir(jid) {
   return chatState.get(jid)?.workingDir || DEFAULT_WORKING_DIR;
@@ -21,6 +55,7 @@ function setWorkingDir(jid, dir) {
   } else {
     chatState.set(jid, { workingDir: dir });
   }
+  saveState();
 }
 
 const ALLOWED_USERS = new Set(
@@ -56,7 +91,7 @@ function makeSendFn(jid) {
 
 // --- Message Router ---
 
-async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
+async function handleMessage(jid, text, quotedStanzaId, _rawMsg, fromMe) {
   // Only process messages in the self-chat ("Message Yourself") or from authorized users.
   // Messages sent by the account owner to other chats should be ignored.
   if (fromMe) {
@@ -67,6 +102,19 @@ async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
 
   const sendFn = makeSendFn(jid);
 
+  try {
+    await _routeMessage(jid, text, quotedStanzaId, sendFn);
+  } catch (err) {
+    console.error("[codeclaw] Unhandled error in message handler:", err);
+    try {
+      await sendFn(`Internal error: ${err.message}`);
+    } catch {
+      // sendFn itself failed — nothing more we can do
+    }
+  }
+}
+
+async function _routeMessage(jid, text, quotedStanzaId, sendFn) {
   // 1. Quoted reply → check if it's a permission response
   if (quotedStanzaId) {
     const resolved = claude.resolvePermission(quotedStanzaId, text);
@@ -140,6 +188,7 @@ async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
 
       case "new":
         claude.clearSession(jid);
+        saveState();
         await sendFn("Session cleared. Next message starts a fresh conversation.");
         return;
 
@@ -174,6 +223,7 @@ async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
       default:
         // Forward other slash commands to Claude
         await claude.execute(jid, trimmed, sendFn, { workingDir: getWorkingDir(jid) });
+        saveState(); // persist session ID after query
         return;
     }
   }
@@ -199,6 +249,7 @@ async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
 
   // 5. Default → send to Claude Code
   await claude.execute(jid, trimmed, sendFn, { workingDir: getWorkingDir(jid) });
+  saveState(); // persist session ID after query
 }
 
 // --- Help Text ---
@@ -237,6 +288,7 @@ async function main() {
     `[codeclaw] Allowed users: ${ALLOWED_USERS.size === 0 ? "all" : [...ALLOWED_USERS].join(", ")}`
   );
 
+  await loadState();
   await whatsapp.connect();
   whatsapp.onMessage(handleMessage);
 
