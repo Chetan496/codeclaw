@@ -218,6 +218,51 @@ rm -rf node_modules && npm install
 
 **Long output gets cut off** — CodeClaw auto-chunks messages at 4000 characters. Very long output arrives as multiple messages.
 
+## Running with systemd
+
+To keep CodeClaw running as a background service, create a systemd unit file:
+
+```ini
+[Unit]
+Description=CodeClaw - WhatsApp interface for Claude Code
+After=network.target
+
+[Service]
+Type=simple
+User=yourusername
+WorkingDirectory=/home/yourusername/codeclaw
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=10
+EnvironmentFile=/home/yourusername/codeclaw/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=codeclaw
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Adjust `User`, `WorkingDirectory`, `ExecStart`, and `EnvironmentFile` paths to match your setup. Then:
+
+```bash
+sudo cp codeclaw.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable codeclaw
+sudo systemctl start codeclaw
+```
+
+Check status and logs:
+
+```bash
+sudo systemctl status codeclaw
+journalctl -u codeclaw -f
+```
+
+> **Note:** The first run requires scanning a QR code interactively (`node index.js`). Use systemd only after the initial WhatsApp pairing is complete and the `auth/` directory exists.
+
 ## License
 
 MIT
