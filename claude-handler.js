@@ -37,7 +37,7 @@ export class ClaudeHandler {
 
       const queryOptions = {
         cwd,
-        permissionMode: "default",
+        permissionMode: "acceptEdits",
         canUseTool,
         abortController: ac,
       };
