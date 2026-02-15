@@ -191,6 +191,14 @@ export class WhatsAppClient {
     return ids;
   }
 
+  get userJid() {
+    const id = this.sock?.user?.id;
+    if (!id) return null;
+    // Baileys user.id may include :device suffix (e.g. "1234:5@s.whatsapp.net")
+    // Normalize to plain JID for comparison with remoteJid
+    return id.replace(/:\d+@/, "@");
+  }
+
   disconnect() {
     if (this.sock) {
       this.sock.end();

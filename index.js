@@ -57,8 +57,13 @@ function makeSendFn(jid) {
 // --- Message Router ---
 
 async function handleMessage(jid, text, quotedStanzaId, rawMsg, fromMe) {
-  // If fromMe, the account owner sent it — always authorized (they own the device).
-  if (!fromMe && !isAuthorized(jid)) return;
+  // Only process messages in the self-chat ("Message Yourself") or from authorized users.
+  // Messages sent by the account owner to other chats should be ignored.
+  if (fromMe) {
+    if (jid !== whatsapp.userJid) return;
+  } else if (!isAuthorized(jid)) {
+    return;
+  }
 
   const sendFn = makeSendFn(jid);
 
